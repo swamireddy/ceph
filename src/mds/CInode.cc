@@ -950,7 +950,28 @@ void CInode::_stored(version_t v, Context *fin)
   fin->complete(0);
 }
 
+void CInode::flush(Context *fin)
+{
+  dout(10) << "flush " << *this << dendl;
+  assert(is_auth() && can_auth_pin());
+
+  C_GatherBuilder gather(g_ceph_context, fin);
+
+  if (is_dirty_parent()) {
+    store_backtrace(gather.new_sub());
+  }
+  if (is_dirty()) {
+    if (is_dir()) {
+      store(gather.new_sub());
+    }
+    parent->dir->commit(0, gather.new_sub());
+  }
+
+  gather.activate();
+}
+
 struct C_IO_Inode_Fetched : public CInodeIOContext {
+  CInode *in;
   bufferlist bl, bl2;
   Context *fin;
   C_IO_Inode_Fetched(CInode *i, Context *f) : CInodeIOContext(i), fin(f) {}
