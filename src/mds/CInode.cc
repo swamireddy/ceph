@@ -3498,7 +3498,8 @@ bool CInode::_validate_disk_state(ValidationContinuation *c,
     }
 
     fetch_backtrace(&c->bl,
-                    c->get_serial_callback());
+                    new C_OnFinisher(c->get_serial_callback(),
+				     &mdcache->mds->finisher));
     return false;
   }
   assert(0 == "can't have reached here!");
@@ -3546,13 +3547,14 @@ bool CInode::_validate_disk_state(ValidationContinuation *c,
     }
 
     assert(is_dir());
-    C_GatherBuilder gather(g_ceph_context);
+    MDSGatherBuilder gather(g_ceph_context);
     for (map<frag_t,CDir*>::iterator p = dirfrags.begin();
          p != dirfrags.end();
          ++p) {
       p->second->fetch(gather.new_sub(), false);
     }
-    gather.set_finisher(c->get_serial_callback());
+    gather.set_finisher(new MDSInternalContextWrapper(mdcache->mds,
+						      c->get_serial_callback()));
     gather.activate();
     return false;
   }
