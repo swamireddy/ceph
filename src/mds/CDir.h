@@ -512,7 +512,7 @@ public:
    * @pre !is_dirty_rstat()
    * @param fin The Context to call when the flush is committed
    */
-  void flush(Context *fin);
+  void flush(MDSInternalContextBase *fin);
 
   // -- dirtyness --
   version_t get_committing_version() { return committing_version; }

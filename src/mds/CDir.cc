@@ -2069,12 +2069,12 @@ void CDir::_committed(version_t v)
     auth_unpin(this);
 }
 
-void CDir::flush(Context *fin)
+void CDir::flush(MDSInternalContextBase *fin)
 {
   dout(10) << "flush " << *this << dendl;
   assert(is_auth() && can_auth_pin());
 
-  C_GatherBuilder gather(g_ceph_context, fin);
+  MDSGatherBuilder gather(g_ceph_context, fin);
   if (is_dirty()) {
     commit(0, gather.new_sub());
     inode->flush(gather.new_sub());

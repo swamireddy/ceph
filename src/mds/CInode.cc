@@ -950,12 +950,12 @@ void CInode::_stored(version_t v, Context *fin)
   fin->complete(0);
 }
 
-void CInode::flush(Context *fin)
+void CInode::flush(MDSInternalContextBase *fin)
 {
   dout(10) << "flush " << *this << dendl;
   assert(is_auth() && can_auth_pin());
 
-  C_GatherBuilder gather(g_ceph_context, fin);
+  MDSGatherBuilder gather(g_ceph_context, fin);
 
   if (is_dirty_parent()) {
     store_backtrace(gather.new_sub());
