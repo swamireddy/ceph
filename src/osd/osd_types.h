@@ -2316,29 +2316,71 @@ ostream& operator<<(ostream& out, const pg_missing_t& missing);
  *
  */
 struct pg_ls_response_t {
+  bool all_nspace; //Not part of encoded/decoded.  Used to determine encoding
   collection_list_handle_t handle; 
-  list<pair<object_t, string> > entries;
+  list<hobject_t> entries;
 
+  // We have to use new encoding for ceph-dencoder testing to work
+  pg_ls_response_t() : all_nspace(false) { }
+
+  // This doesn't use ENCODE_START() mechanism so we can't upgrade it
+  // We will encode a compatible set of items which will be strange
+  // on older OSDs, but won't assert(v == 1)
   void encode(bufferlist& bl) const {
     __u8 v = 1;
+    if (all_nspace)
+      v = 2;
     ::encode(v, bl);
     ::encode(handle, bl);
-    ::encode(entries, bl);
+    if (v == 2) {
+      ::encode(entries, bl);
+    } else {
+      // Use old format because we might be returning to
+      // back level OSD, and namespace is specified by caller
+
+      // XXX: Can we directly encode to the wire format
+      // without having to create a list and use the
+      // existing list encoder?
+      list<pair<object_t, string> > compat_entries;
+
+      for (list<hobject_t>::const_iterator i = entries.begin();
+          i != entries.end(); ++i) {
+        compat_entries.push_back(make_pair(i->oid, i->get_key()));
+      }
+      ::encode(compat_entries, bl);
+    }
   }
   void decode(bufferlist::iterator& bl) {
     __u8 v;
+
     ::decode(v, bl);
-    assert(v == 1);
+    assert(v == 1 || v == 2);
     ::decode(handle, bl);
-    ::decode(entries, bl);
+    if (v == 2) {
+      ::decode(entries, bl);
+    } else {
+      // Either we are getting this from a back level OSD,
+      // or an ls with a specific namespace was requested
+      list<pair<object_t, string> > compat_entries;
+      ::decode(compat_entries, bl);
+      
+      entries.clear();
+      for (list<pair<object_t, string> >::iterator i = compat_entries.begin();
+                i != compat_entries.end() ; ++i) {
+        entries.push_back(hobject_t(i->first, i->second, 0, 0, -1, handle.get_namespace()));
+      }
+    }
   }
+
+  // XXX: Only 3 fields of the hobject_t are used, so only dump those
   void dump(Formatter *f) const {
     f->dump_stream("handle") << handle;
     f->open_array_section("entries");
-    for (list<pair<object_t, string> >::const_iterator p = entries.begin(); p != entries.end(); ++p) {
+    for (list<hobject_t>::const_iterator p = entries.begin(); p != entries.end(); ++p) {
       f->open_object_section("object");
-      f->dump_stream("object") << p->first;
-      f->dump_string("key", p->second);
+      f->dump_string("namespace", p->get_namespace());
+      f->dump_stream("object") << p->oid;
+      f->dump_string("key", p->get_key());
       f->close_section();
     }
     f->close_section();
@@ -2347,8 +2389,23 @@ struct pg_ls_response_t {
     o.push_back(new pg_ls_response_t);
     o.push_back(new pg_ls_response_t);
     o.back()->handle = hobject_t(object_t("hi"), "key", 1, 2, -1, "");
-    o.back()->entries.push_back(make_pair(object_t("one"), string()));
-    o.back()->entries.push_back(make_pair(object_t("two"), string("twokey")));
+    o.back()->entries.push_back(hobject_t(object_t("one"), "", 0, 0, -1, ""));
+    o.back()->entries.push_back(hobject_t(object_t("two"), "twokey", 0, 0, -1, ""));
+    o.back()->entries.push_back(hobject_t(object_t("three"), "", 0, 0, -1, ""));
+    o.push_back(new pg_ls_response_t);
+    o.back()->handle = hobject_t(object_t("hi"), "key", 1, 2, -1, "n1");
+    o.back()->entries.push_back(hobject_t(object_t("n1one"), "", 0, 0, -1, "n1"));
+    o.back()->entries.push_back(hobject_t(object_t("n1two"), "n1twokey", 0, 0, -1, "n1"));
+    o.back()->entries.push_back(hobject_t(object_t("n1three"), "", 0, 0, -1, "n1"));
+    o.push_back(new pg_ls_response_t);
+    o.back()->all_nspace = true;
+    o.back()->handle = hobject_t(object_t("hi"), "key", 0, 0, -1, ALL_NSPACES);
+    o.back()->entries.push_back(hobject_t(object_t("one"), "", 0, 0, -1, ""));
+    o.back()->entries.push_back(hobject_t(object_t("two"), "twokey", 0, 0, -1, ""));
+    o.back()->entries.push_back(hobject_t(object_t("three"), "", 0, 0, -1, ""));
+    o.back()->entries.push_back(hobject_t(object_t("n1one"), "", 0, 0, -1, "n1"));
+    o.back()->entries.push_back(hobject_t(object_t("n1two"), "n1twokey", 0, 0, -1, "n1"));
+    o.back()->entries.push_back(hobject_t(object_t("n1three"), "", 0, 0, -1, "n1"));
   }
 };
 

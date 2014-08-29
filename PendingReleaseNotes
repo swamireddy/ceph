@@ -19,5 +19,9 @@ v0.85
 
     leveldb_log               = ""
 
+* New ability to list all objects from all namespaces will return incomplete
+  results until all OSDs have been upgraded.  This will impair rados export
+  and rados cppool operations.
+
 v0.86
 -----

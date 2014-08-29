@@ -46,7 +46,7 @@ void RadosTest::cleanup_default_namespace(rados_ioctx_t ioctx)
   int r;
   const char *entry = NULL;
   const char *key = NULL;
-  while ((r = rados_objects_list_next(list_ctx, &entry, &key)) != -ENOENT) {
+  while ((r = rados_nobjects_list_next(list_ctx, &entry, &key, NULL)) != -ENOENT) {
     ASSERT_EQ(0, r);
     rados_ioctx_locator_set_key(ioctx, key);
     ASSERT_EQ(0, rados_remove(ioctx, entry));
@@ -87,10 +87,11 @@ void RadosTestPP::cleanup_default_namespace(librados::IoCtx ioctx)
   // remove all objects from the default namespace to avoid polluting
   // other tests
   ioctx.set_namespace("");
-  for (ObjectIterator it = ioctx.objects_begin();
-       it != ioctx.objects_end(); ++it) {
-    ioctx.locator_set_key(it->second);
-    ASSERT_EQ(0, ioctx.remove(it->first));
+  for (NObjectIterator it = ioctx.nobjects_begin();
+       it != ioctx.nobjects_end(); ++it) {
+    ioctx.locator_set_key(it->locator);
+    ASSERT_EQ("", it->nspace);
+    ASSERT_EQ(0, ioctx.remove(it->oid));
   }
 }
 
@@ -168,10 +169,10 @@ void RadosTestParamPP::cleanup_default_namespace(librados::IoCtx ioctx)
   // remove all objects from the default namespace to avoid polluting
   // other tests
   ioctx.set_namespace("");
-  for (ObjectIterator it = ioctx.objects_begin();
-       it != ioctx.objects_end(); ++it) {
-    ioctx.locator_set_key(it->second);
-    ASSERT_EQ(0, ioctx.remove(it->first));
+  for (NObjectIterator it = ioctx.nobjects_begin();
+       it != ioctx.nobjects_end(); ++it) {
+    ioctx.locator_set_key(it->locator);
+    ASSERT_EQ(0, ioctx.remove(it->oid));
   }
 }
 

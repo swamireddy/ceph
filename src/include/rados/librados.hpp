@@ -63,6 +63,43 @@ namespace librados
   typedef void *completion_t;
   typedef void (*callback_t)(completion_t cb, void *arg);
 
+  typedef struct {
+    std::string nspace;
+    std::string oid;
+    std::string locator;
+  } ListObject_t;
+
+  class NObjectIterator : public std::iterator <std::forward_iterator_tag, std::string> {
+  public:
+    static const NObjectIterator __EndObjectIterator;
+    NObjectIterator() {}
+    NObjectIterator(ObjListCtx *ctx_);
+    ~NObjectIterator();
+    NObjectIterator(const NObjectIterator &rhs);
+    NObjectIterator& operator=(const NObjectIterator& rhs);
+
+    bool operator==(const NObjectIterator& rhs) const;
+    bool operator!=(const NObjectIterator& rhs) const;
+    const ListObject_t& operator*() const;
+    const ListObject_t* operator->() const;
+    NObjectIterator &operator++(); // Preincrement
+    NObjectIterator operator++(int); // Postincrement
+    friend class IoCtx;
+    friend class ObjectIterator;
+
+    /// get current hash position of the iterator, rounded to the current pg
+    uint32_t get_pg_hash_position() const;
+
+    /// move the iterator to a given hash position.  this may (will!) be rounded to the nearest pg.
+    uint32_t seek(uint32_t pos);
+
+  private:
+    void get_next();
+    ceph::shared_ptr < ObjListCtx > ctx;
+    ListObject_t cur_obj;
+  };
+
+  // DEPRECATED; Use NObjectIterator
   class ObjectIterator : public std::iterator <std::forward_iterator_tag, std::string> {
   public:
     static const ObjectIterator __EndObjectIterator;
@@ -661,6 +698,15 @@ namespace librados
 		     std::list<librados::locker_t> *lockers);
 
 
+    /// Start enumerating objects for a pool
+    NObjectIterator nobjects_begin();
+    /// Start enumerating objects for a pool starting from a hash position
+    NObjectIterator nobjects_begin(uint32_t start_hash_position);
+    /// Iterator indicating the end of a pool
+    const NObjectIterator& nobjects_end() const;
+
+    // DEPRECATED
+    // If the context specifies ANY_NSPACE these will assert
     /// Start enumerating objects for a pool
     ObjectIterator objects_begin();
     /// Start enumerating objects for a pool starting from a hash position

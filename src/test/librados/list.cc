@@ -25,7 +25,7 @@ TEST_F(LibRadosList, ListObjects) {
   ASSERT_EQ(0, rados_objects_list_open(ioctx, &ctx));
   const char *entry;
   bool foundit = false;
-  while (rados_objects_list_next(ctx, &entry, NULL) != -ENOENT) {
+  while (rados_nobjects_list_next(ctx, &entry, NULL, NULL) != -ENOENT) {
     foundit = true;
     ASSERT_EQ(std::string(entry), "foo");
   }
@@ -142,7 +142,7 @@ static void check_list(std::set<std::string>& myset, rados_list_ctx_t& ctx)
    * we don't hit ENOENT until we have hit every item in myset
    * at least once.
    */
-  while (rados_objects_list_next(ctx, &entry, NULL) != -ENOENT) {
+  while (rados_nobjects_list_next(ctx, &entry, NULL, NULL) != -ENOENT) {
     ASSERT_TRUE(orig_set.end() != orig_set.find(std::string(entry)));
     myset.erase(std::string(entry));
   }
@@ -294,7 +294,7 @@ TEST_F(LibRadosList, ListObjectsStart) {
   ASSERT_EQ(0, rados_objects_list_open(ioctx, &ctx));
   std::map<int, std::set<std::string> > pg_to_obj;
   const char *entry;
-  while (rados_objects_list_next(ctx, &entry, NULL) == 0) {
+  while (rados_nobjects_list_next(ctx, &entry, NULL, NULL) == 0) {
     uint32_t pos = rados_objects_list_get_pg_hash_position(ctx);
     std::cout << entry << " " << pos << std::endl;
     pg_to_obj[pos].insert(entry);
@@ -306,7 +306,7 @@ TEST_F(LibRadosList, ListObjectsStart) {
   ASSERT_EQ(0, rados_objects_list_open(ioctx, &ctx));
   while (p != pg_to_obj.rend()) {
     ASSERT_EQ((uint32_t)p->first, rados_objects_list_seek(ctx, p->first));
-    ASSERT_EQ(0, rados_objects_list_next(ctx, &entry, NULL));
+    ASSERT_EQ(0, rados_nobjects_list_next(ctx, &entry, NULL, NULL));
     std::cout << "have " << entry << " expect one of " << p->second << std::endl;
     ASSERT_TRUE(p->second.count(entry));
     ++p;
@@ -350,7 +350,7 @@ TEST_F(LibRadosListEC, ListObjects) {
   ASSERT_EQ(0, rados_objects_list_open(ioctx, &ctx));
   const char *entry;
   bool foundit = false;
-  while (rados_objects_list_next(ctx, &entry, NULL) != -ENOENT) {
+  while (rados_nobjects_list_next(ctx, &entry, NULL, NULL) != -ENOENT) {
     foundit = true;
     ASSERT_EQ(std::string(entry), "foo");
   }
@@ -584,7 +584,7 @@ TEST_F(LibRadosListEC, ListObjectsStart) {
   ASSERT_EQ(0, rados_objects_list_open(ioctx, &ctx));
   std::map<int, std::set<std::string> > pg_to_obj;
   const char *entry;
-  while (rados_objects_list_next(ctx, &entry, NULL) == 0) {
+  while (rados_nobjects_list_next(ctx, &entry, NULL, NULL) == 0) {
     uint32_t pos = rados_objects_list_get_pg_hash_position(ctx);
     std::cout << entry << " " << pos << std::endl;
     pg_to_obj[pos].insert(entry);
@@ -596,7 +596,7 @@ TEST_F(LibRadosListEC, ListObjectsStart) {
   ASSERT_EQ(0, rados_objects_list_open(ioctx, &ctx));
   while (p != pg_to_obj.rend()) {
     ASSERT_EQ((uint32_t)p->first, rados_objects_list_seek(ctx, p->first));
-    ASSERT_EQ(0, rados_objects_list_next(ctx, &entry, NULL));
+    ASSERT_EQ(0, rados_nobjects_list_next(ctx, &entry, NULL, NULL));
     std::cout << "have " << entry << " expect one of " << p->second << std::endl;
     ASSERT_TRUE(p->second.count(entry));
     ++p;

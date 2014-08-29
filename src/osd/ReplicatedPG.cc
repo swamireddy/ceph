@@ -824,6 +824,8 @@ void ReplicatedPG::do_pg_op(OpRequestRef op)
 	// read into a buffer
         vector<hobject_t> sentries;
         pg_ls_response_t response;
+	// Hint to encoder to use format only for newer OSDs
+	response.all_nspace = (m->get_object_locator().nspace == ALL_NSPACES);
 	try {
 	  ::decode(response.handle, bp);
 	}
@@ -920,14 +922,14 @@ void ReplicatedPG::do_pg_op(OpRequestRef op)
 	  }
 
 	  // skip wrong namespace
-	  if (candidate.get_namespace() != m->get_object_locator().nspace)
+	  if (m->get_object_locator().nspace != ALL_NSPACES &&
+               candidate.get_namespace() != m->get_object_locator().nspace)
 	    continue;
 
 	  if (filter && !pgls_filter(filter, candidate, filter_out))
 	    continue;
 
-	  response.entries.push_back(make_pair(candidate.oid,
-					       candidate.get_key()));
+	  response.entries.push_back(candidate);
 	}
 	if (next.is_max() &&
 	    missing_iter == pg_log.get_missing().missing.end() &&

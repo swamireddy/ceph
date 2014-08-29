@@ -840,9 +840,14 @@ uint32_t rados_objects_list_seek(rados_list_ctx_t ctx, uint32_t pos);
  * @param ctx iterator marking where you are in the listing
  * @param entry where to store the name of the entry
  * @param key where to store the object locator (set to NULL to ignore)
+ * @param nspace where to store the object namespace (set to NULL to ignore)
  * @returns 0 on success, negative error code on failure
  * @returns -ENOENT when there are no more objects to list
  */
+int rados_nobjects_list_next(rados_list_ctx_t ctx, const char **entry,
+	const char **key, const char **nspace);
+
+// DEPRECATED; use rados_nobjects_list_next() instead
 int rados_objects_list_next(rados_list_ctx_t ctx, const char **entry, const char **key);
 
 /**

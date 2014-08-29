@@ -25,6 +25,8 @@
 
 typedef uint64_t filestore_hobject_key_t;
 
+const string ALL_NSPACES = "\001";
+
 namespace ceph {
   class Formatter;
 }

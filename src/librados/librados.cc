@@ -489,6 +489,104 @@ struct librados::ObjListCtx {
   }
 };
 
+///////////////////////////// NObjectIterator /////////////////////////////
+librados::NObjectIterator::NObjectIterator(ObjListCtx *ctx_)
+  : ctx(ctx_)
+{
+}
+
+librados::NObjectIterator::~NObjectIterator()
+{
+  ctx.reset();
+}
+
+librados::NObjectIterator::NObjectIterator(const NObjectIterator &rhs)
+{
+  *this = rhs;
+}
+
+librados::NObjectIterator& librados::NObjectIterator::operator=(const librados::NObjectIterator &rhs)
+{
+  if (&rhs == this)
+    return *this;
+  if (rhs.ctx.get() == NULL) {
+    ctx.reset();
+    return *this;
+  }
+  Objecter::ListContext *list_ctx = new Objecter::ListContext(*rhs.ctx->lc);
+  ctx.reset(new ObjListCtx(rhs.ctx->ctx, list_ctx));
+  cur_obj = rhs.cur_obj;
+  return *this;
+}
+
+bool librados::NObjectIterator::operator==(const librados::NObjectIterator& rhs) const {
+  if (ctx.get() == NULL)
+    return rhs.ctx.get() == NULL || rhs.ctx->lc->at_end();
+  if (rhs.ctx.get() == NULL)
+    return ctx.get() == NULL || ctx->lc->at_end();
+  return ctx.get() == rhs.ctx.get();
+}
+
+bool librados::NObjectIterator::operator!=(const librados::NObjectIterator& rhs) const {
+  return !(*this == rhs);
+}
+
+const librados::ListObject_t& librados::NObjectIterator::operator*() const {
+  return cur_obj;
+}
+
+const librados::ListObject_t* librados::NObjectIterator::operator->() const {
+  return &cur_obj;
+}
+
+librados::NObjectIterator& librados::NObjectIterator::operator++()
+{
+  get_next();
+  return *this;
+}
+
+librados::NObjectIterator librados::NObjectIterator::operator++(int)
+{
+  librados::NObjectIterator ret(*this);
+  get_next();
+  return ret;
+}
+
+uint32_t librados::NObjectIterator::seek(uint32_t pos)
+{
+  uint32_t r = rados_objects_list_seek(ctx.get(), pos);
+  get_next();
+  return r;
+}
+
+void librados::NObjectIterator::get_next()
+{
+  const char *entry, *key, *nspace;
+  if (ctx->lc->at_end())
+    return;
+  int ret = rados_nobjects_list_next(ctx.get(), &entry, &key, &nspace);
+  if (ret == -ENOENT) {
+    return;
+  }
+  else if (ret) {
+    ostringstream oss;
+    oss << "rados returned " << cpp_strerror(ret);
+    throw std::runtime_error(oss.str());
+  }
+
+  cur_obj.nspace = nspace;
+  cur_obj.oid = entry;
+  cur_obj.locator = key ? key : string();
+}
+
+uint32_t librados::NObjectIterator::get_pg_hash_position() const
+{
+  return ctx->lc->get_pg_hash_position();
+}
+
+const librados::NObjectIterator librados::NObjectIterator::__EndObjectIterator(NULL);
+
+// DEPRECATED; Use NObjectIterator instead
 ///////////////////////////// ObjectIterator /////////////////////////////
 librados::ObjectIterator::ObjectIterator(ObjListCtx *ctx_)
   : ctx(ctx_)
@@ -1261,9 +1359,34 @@ int librados::IoCtx::list_lockers(const std::string &oid, const std::string &nam
   return tmp_lockers.size();
 }
 
+librados::NObjectIterator librados::IoCtx::nobjects_begin()
+{
+  rados_list_ctx_t listh;
+  rados_objects_list_open(io_ctx_impl, &listh);
+  NObjectIterator iter((ObjListCtx*)listh);
+  iter.get_next();
+  return iter;
+}
+
+librados::NObjectIterator librados::IoCtx::nobjects_begin(uint32_t pos)
+{
+  rados_list_ctx_t listh;
+  rados_objects_list_open(io_ctx_impl, &listh);
+  NObjectIterator iter((ObjListCtx*)listh);
+  iter.seek(pos);
+  return iter;
+}
+
+const librados::NObjectIterator& librados::IoCtx::nobjects_end() const
+{
+  return NObjectIterator::__EndObjectIterator;
+}
+
+// DEPRECATED; use n versions above
 librados::ObjectIterator librados::IoCtx::objects_begin()
 {
   rados_list_ctx_t listh;
+  assert(io_ctx_impl->oloc.nspace != ALL_NSPACES);
   rados_objects_list_open(io_ctx_impl, &listh);
   ObjectIterator iter((ObjListCtx*)listh);
   iter.get_next();
@@ -1273,6 +1396,7 @@ librados::ObjectIterator librados::IoCtx::objects_begin()
 librados::ObjectIterator librados::IoCtx::objects_begin(uint32_t pos)
 {
   rados_list_ctx_t listh;
+  assert(io_ctx_impl->oloc.nspace != ALL_NSPACES);
   rados_objects_list_open(io_ctx_impl, &listh);
   ObjectIterator iter((ObjListCtx*)listh);
   iter.seek(pos);
@@ -3078,6 +3202,46 @@ extern "C" uint32_t rados_objects_list_get_pg_hash_position(
   return retval;
 }
 
+extern "C" int rados_nobjects_list_next(rados_list_ctx_t listctx, const char **entry, const char **key, const char **nspace)
+{
+  tracepoint(librados, rados_objects_list_next_enter, listctx);
+  librados::ObjListCtx *lh = (librados::ObjListCtx *)listctx;
+  Objecter::ListContext *h = lh->lc;
+
+  // if the list is non-empty, this method has been called before
+  if (!h->list.empty())
+    // so let's kill the previously-returned object
+    h->list.pop_front();
+
+  if (h->list.empty()) {
+    int ret = lh->ctx->list(lh->lc, RADOS_LIST_MAX_ENTRIES);
+    if (ret < 0) {
+      tracepoint(librados, rados_objects_list_next_exit, ret, NULL, NULL);
+      return ret;
+    }
+    if (h->list.empty()) {
+      tracepoint(librados, rados_objects_list_next_exit, -ENOENT, NULL, NULL);
+      return -ENOENT;
+    }
+  }
+
+  *entry = h->list.front().oid.name.c_str();
+
+  if (key) {
+    if (h->list.front().get_key().size())
+      *key = h->list.front().get_key().c_str();
+    else
+      *key = NULL;
+  }
+  if (nspace)
+    *nspace = (char *)h->list.front().get_namespace().c_str();
+  int retval = 0;
+  // XXX: Add nspace to tracepoint?????
+  tracepoint(librados, rados_objects_list_next_exit, 0, *entry, key);
+  return retval;
+}
+
+// DEPRECATED
 extern "C" int rados_objects_list_next(rados_list_ctx_t listctx, const char **entry, const char **key)
 {
   tracepoint(librados, rados_objects_list_next_enter, listctx);
@@ -3101,11 +3265,11 @@ extern "C" int rados_objects_list_next(rados_list_ctx_t listctx, const char **en
     }
   }
 
-  *entry = h->list.front().first.name.c_str();
+  *entry = h->list.front().oid.name.c_str();
 
   if (key) {
-    if (h->list.front().second.size())
-      *key = h->list.front().second.c_str();
+    if (h->list.front().get_key().size())
+      *key = h->list.front().get_key().c_str();
     else
       *key = NULL;
   }

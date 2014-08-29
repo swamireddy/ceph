@@ -1249,7 +1249,7 @@ public:
     string nspace;
 
     bufferlist bl;   // raw data read to here
-    std::list<pair<object_t, string> > list;
+    std::list<hobject_t> list;
 
     bufferlist filter;
 

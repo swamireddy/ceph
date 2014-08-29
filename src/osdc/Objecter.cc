@@ -2728,6 +2728,8 @@ void Objecter::_list_reply(ListContext *list_context, int r,
   bufferlist extra_info;
   ::decode(response, iter);
   if (!iter.end()) {
+    // XXX: Can the whole extra_info stuff be removed?
+    ldout(cct, 0) << "Strange extra_info bufferlist after pg_ls_response_t" << dendl;
     ::decode(extra_info, iter);
   }
   list_context->cookie = response.handle;
