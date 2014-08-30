@@ -219,12 +219,18 @@ void *Pipe::DelayedDelivery::entry()
       --flush_count;
       active_flush = true;
     }
-    if (pipe->in_q->can_fast_dispatch(m)) {
-      delay_lock.Unlock();
-      pipe->in_q->fast_dispatch(m);
-      delay_lock.Lock();
+    if (m->get_connection()->is_connected()) {
+      if (pipe->in_q->can_fast_dispatch(m)) {
+	delay_lock.Unlock();
+	pipe->in_q->fast_dispatch(m);
+	delay_lock.Lock();
+      } else {
+	pipe->in_q->enqueue(m, m->get_priority(), pipe->conn_id);
+      }
     } else {
-      pipe->in_q->enqueue(m, m->get_priority(), pipe->conn_id);
+      // the connection we were associated with was probably marked down
+      // while we delayed.
+      m->put();
     }
     active_flush = false;
   }
