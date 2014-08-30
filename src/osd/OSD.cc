@@ -5523,10 +5523,12 @@ void OSD::ms_fast_preprocess(Message *m)
     if (m->get_type() == CEPH_MSG_OSD_MAP) {
       MOSDMap *mm = static_cast<MOSDMap*>(m);
       Session *s = static_cast<Session*>(m->get_connection()->get_priv());
-      s->received_map_lock.Lock();
-      s->received_map_epoch = mm->get_last();
-      s->received_map_lock.Unlock();
-      s->put();
+      if (s) {
+	s->received_map_lock.Lock();
+	s->received_map_epoch = mm->get_last();
+	s->received_map_lock.Unlock();
+	s->put();
+      }
     }
   }
 }
@@ -5730,13 +5732,15 @@ bool OSD::dispatch_op_fast(OpRequestRef& op, OSDMapRef& osdmap) {
   if (msg_epoch > osdmap->get_epoch()) {
     Session *s = static_cast<Session*>(op->get_req()->
 				       get_connection()->get_priv());
-    s->received_map_lock.Lock();
-    epoch_t received_epoch = s->received_map_epoch;
-    s->received_map_lock.Unlock();
-    if (received_epoch < msg_epoch) {
-      osdmap_subscribe(msg_epoch, false);
+    if (s) {
+      s->received_map_lock.Lock();
+      epoch_t received_epoch = s->received_map_epoch;
+      s->received_map_lock.Unlock();
+      if (received_epoch < msg_epoch) {
+	osdmap_subscribe(msg_epoch, false);
+      }
+      s->put();
     }
-    s->put();
     return false;
   }
 
